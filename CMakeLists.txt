@@ -4,8 +4,8 @@ project(pymtpng CXX)
 include(FetchContent)
 
 # Default to Release build type
-if (NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Release)
+if (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")
+  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "" FORCE)
 endif()
 
 # Fetch pybind11 library
