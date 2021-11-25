@@ -12,7 +12,7 @@ endif()
 FetchContent_Declare(
   pybind11
   GIT_REPOSITORY https://github.com/pybind/pybind11
-  GIT_TAG        v2.6.2
+  GIT_TAG        v2.8.1
   GIT_SHALLOW    True
 )
 FetchContent_MakeAvailable(pybind11)
@@ -21,7 +21,7 @@ FetchContent_MakeAvailable(pybind11)
 FetchContent_Declare(
   mtpng
   GIT_REPOSITORY https://github.com/brion/mtpng
-  GIT_TAG        0.3.4
+  GIT_TAG        7b8bc8939c8dda1c571dd5083113f4a45f074a99
   GIT_SHALLOW    True
 )
 FetchContent_MakeAvailable(mtpng)

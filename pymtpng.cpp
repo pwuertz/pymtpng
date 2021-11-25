@@ -1,10 +1,12 @@
 #include <memory>
 #include <vector>
+#include <map>
 #include <string_view>
 
 #include <Python.h>
 #include "pybind11/pybind11.h"
 #include "pybind11/numpy.h"
+#include "pybind11/stl.h"
 
 #include "mtpng.hpp"
 
@@ -12,8 +14,9 @@
 using namespace std::string_view_literals;
 namespace py = pybind11;
 
-constexpr auto VERSION = "0.1"sv;
+constexpr auto VERSION = "0.2"sv;
 
+using stringv_map = std::map<std::string_view, std::string_view>;
 
 using np_uint8_array_t = py::array_t<uint8_t, py::array::c_style>;
 using np_uint16_array_t = py::array_t<uint16_t, py::array::c_style>;
@@ -31,6 +34,41 @@ extern "C" bool flush_func([[maybe_unused]] void* user_data)
     return true;
 }
 
+mtpng_result write_itxt_chunk(mtpng_encoder* p_encoder, const std::string_view& key, const std::string_view& value)
+{
+    if (key.size() > 79) { throw std::runtime_error("Info key too long"); }
+
+    std::vector<char> chunk;
+    // Keyword:             1-79 bytes (character string)
+    chunk.insert(chunk.end(), key.begin(), key.end());
+    // Null separator:      1 byte
+    chunk.push_back(0);
+    // Compression flag:    1 byte
+    chunk.push_back(0);
+    // Compression method:  1 byte
+    chunk.push_back(0);
+    // Language tag:        0 or more bytes (character string)
+    // Null separator:      1 byte
+    chunk.push_back(0);
+    // Translated keyword:  0 or more bytes
+    // Null separator:      1 byte
+    chunk.push_back(0);
+    // Text:                0 or more bytes
+    chunk.insert(chunk.end(), value.begin(), value.end());
+
+    return mtpng_encoder_write_chunk(
+        p_encoder, "iTXt", reinterpret_cast<const uint8_t*>(chunk.data()), chunk.size());
+}
+
+mtpng_result write_itxt_chunks(mtpng_encoder* p_encoder, const stringv_map& map)
+{
+    for (const auto& [key, value] : map) {
+        const auto r = write_itxt_chunk(p_encoder, key, value);
+        if (r != MTPNG_RESULT_OK) { return r; }
+    }
+    return MTPNG_RESULT_OK;
+}
+
 enum class Dtype {
     U8, U16
 };
@@ -41,7 +79,8 @@ void encode_png_impl(
     const py::object& writable,
     const mtpng_filter_t filter,
     const mtpng_strategy_t strategy,
-    const mtpng_compression_level_t compression_level)
+    const mtpng_compression_level_t compression_level,
+    const stringv_map& info)
 {
     // Get array shape and data
     const auto ndim = image.ndim();
@@ -96,6 +135,7 @@ void encode_png_impl(
         void* user_data = const_cast<write_fn_t*>(&py_write_fn);
         const auto encoder = create_encoder(write_func, flush_func, user_data, options.get());
         TRY(mtpng_encoder_write_header(encoder.get(), header.get()));
+        TRY(write_itxt_chunks(encoder.get(), info));
 
         const auto nitems_row = width * nchannels;
         if (dtype == Dtype::U8) {
@@ -128,9 +168,10 @@ void encode_u16_png(
     const py::object& writable,
     const mtpng_filter_t filter,
     const mtpng_strategy_t strategy,
-    const mtpng_compression_level_t compression_level)
+    const mtpng_compression_level_t compression_level,
+    const stringv_map& info)
 {
-    encode_png_impl(image, Dtype::U16, writable, filter, strategy, compression_level);
+    encode_png_impl(image, Dtype::U16, writable, filter, strategy, compression_level, info);
 }
 
 void encode_png(
@@ -138,9 +179,10 @@ void encode_png(
     const py::object& writable,
     const mtpng_filter_t filter,
     const mtpng_strategy_t strategy,
-    const mtpng_compression_level_t compression_level)
+    const mtpng_compression_level_t compression_level,
+    const stringv_map& info)
 {
-    encode_png_impl(image, Dtype::U8, writable, filter, strategy, compression_level);
+    encode_png_impl(image, Dtype::U8, writable, filter, strategy, compression_level, info);
 }
 
 PYBIND11_MODULE(pymtpng, m) {
@@ -173,12 +215,14 @@ PYBIND11_MODULE(pymtpng, m) {
         py::arg("image"), py::arg("writable"),
         py::arg("filter") = MTPNG_FILTER_ADAPTIVE,
         py::arg("strategy") = MTPNG_STRATEGY_RLE,
-        py::arg("compression_level") = MTPNG_COMPRESSION_LEVEL_DEFAULT);
+        py::arg("compression_level") = MTPNG_COMPRESSION_LEVEL_DEFAULT,
+        py::arg("info") = stringv_map {});
 
     m.def(
         "encode_u16_png", &encode_u16_png, "Encode 16bit PNG to writable object.",
         py::arg("image"), py::arg("writable"),
         py::arg("filter") = MTPNG_FILTER_ADAPTIVE,
         py::arg("strategy") = MTPNG_STRATEGY_RLE,
-        py::arg("compression_level") = MTPNG_COMPRESSION_LEVEL_DEFAULT);
+        py::arg("compression_level") = MTPNG_COMPRESSION_LEVEL_DEFAULT,
+        py::arg("info") = stringv_map {});
 }
