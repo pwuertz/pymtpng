@@ -21,8 +21,7 @@ FetchContent_MakeAvailable(pybind11)
 FetchContent_Declare(
   mtpng
   GIT_REPOSITORY https://github.com/brion/mtpng
-  GIT_TAG        7b8bc8939c8dda1c571dd5083113f4a45f074a99
-  GIT_SHALLOW    True
+  GIT_TAG        714e5a1905d0f95f0dadca730b6a5c35927f7ace
 )
 FetchContent_MakeAvailable(mtpng)
 
@@ -47,6 +46,8 @@ set_target_properties(mtpng_static PROPERTIES
 )
 if(WIN32)
   target_link_libraries(mtpng_static INTERFACE userenv ws2_32)
+else()
+  target_link_libraries(mtpng_static INTERFACE z)
 endif()
 
 # Create target for python library
