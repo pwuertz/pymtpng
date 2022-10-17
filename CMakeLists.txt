@@ -3,16 +3,11 @@ project(pymtpng CXX)
 
 include(FetchContent)
 
-# Default to Release build type
-if (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")
-  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "" FORCE)
-endif()
-
 # Fetch pybind11 library
 FetchContent_Declare(
   pybind11
   GIT_REPOSITORY https://github.com/pybind/pybind11
-  GIT_TAG        v2.8.1
+  GIT_TAG        v2.10.0
   GIT_SHALLOW    True
 )
 FetchContent_MakeAvailable(pybind11)
@@ -45,7 +40,7 @@ set_target_properties(mtpng_static PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES "${mtpng_SOURCE_DIR}/c"
 )
 if(WIN32)
-  target_link_libraries(mtpng_static INTERFACE userenv ws2_32)
+  target_link_libraries(mtpng_static INTERFACE userenv ws2_32 Bcrypt)
 else()
   target_link_libraries(mtpng_static INTERFACE z)
 endif()

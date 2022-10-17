@@ -14,7 +14,7 @@
 using namespace std::string_view_literals;
 namespace py = pybind11;
 
-constexpr auto VERSION = "0.2"sv;
+constexpr auto VERSION = "1.0"sv;
 
 using stringv_map = std::map<std::string_view, std::string_view>;
 

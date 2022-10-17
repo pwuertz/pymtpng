@@ -3,7 +3,7 @@ from cmake_build_extension import BuildExtension, CMakeExtension
 
 setup(
     name="pymtpng",
-    version="0.1",
+    version="1.0",
     author="Peter Würtz",
     description="Python bindings for MTPNG library",
     ext_modules=[CMakeExtension(
