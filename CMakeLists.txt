@@ -7,7 +7,7 @@ include(FetchContent)
 FetchContent_Declare(
   pybind11
   GIT_REPOSITORY https://github.com/pybind/pybind11
-  GIT_TAG        v2.10.0
+  GIT_TAG        v2.10.4
   GIT_SHALLOW    True
 )
 FetchContent_MakeAvailable(pybind11)
@@ -16,7 +16,7 @@ FetchContent_MakeAvailable(pybind11)
 FetchContent_Declare(
   mtpng
   GIT_REPOSITORY https://github.com/brion/mtpng
-  GIT_TAG        714e5a1905d0f95f0dadca730b6a5c35927f7ace
+  GIT_TAG        016c3fb07b6300bb8a08ee8790e80bc1c93b0c84
 )
 FetchContent_MakeAvailable(mtpng)
 
@@ -40,7 +40,7 @@ set_target_properties(mtpng_static PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES "${mtpng_SOURCE_DIR}/c"
 )
 if(WIN32)
-  target_link_libraries(mtpng_static INTERFACE userenv ws2_32 Bcrypt)
+  target_link_libraries(mtpng_static INTERFACE userenv ntdll ws2_32 Bcrypt)
 else()
   target_link_libraries(mtpng_static INTERFACE z)
 endif()
