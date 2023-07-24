@@ -3,11 +3,17 @@ project(pymtpng CXX)
 
 include(FetchContent)
 
+if(WIN32)
+  # Prevent pybind11 from sharing resources with other, potentially ABI incompatible modules
+  # https://github.com/pybind/pybind11/issues/2898
+  add_definitions(-DPYBIND11_COMPILER_TYPE="_${PROJECT_NAME}_abi")
+endif()
+
 # Fetch pybind11 library
 FetchContent_Declare(
   pybind11
   GIT_REPOSITORY https://github.com/pybind/pybind11
-  GIT_TAG        v2.10.4
+  GIT_TAG        v2.11.1
   GIT_SHALLOW    True
 )
 FetchContent_MakeAvailable(pybind11)
