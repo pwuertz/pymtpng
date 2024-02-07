@@ -1,3 +1,4 @@
+import sys
 import pathlib
 from setuptools import setup
 from cmake_build_extension import BuildExtension, CMakeExtension
@@ -8,7 +9,7 @@ long_description_content_type="text/markdown"
 
 setup(
     name="pymtpng",
-    version="1.0.1",
+    version="1.0.2",
     author="Peter Würtz",
     author_email="pwuertz@gmail.com",
     url="https://github.com/pwuertz/pymtpng",
@@ -19,6 +20,10 @@ setup(
         name="pymtpng",
         source_dir=".",
         install_prefix=".",
+        cmake_configure_options=[
+            f"-DPYTHON_EXECUTABLE={pathlib.Path(sys.executable)}",
+            f"-DPYTHON3_EXECUTABLE={pathlib.Path(sys.executable)}",
+	    ],
     )],
     cmdclass=dict(build_ext=BuildExtension),
 )
