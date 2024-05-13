@@ -1,28 +1,29 @@
 cmake_minimum_required(VERSION 3.16)
 project(pymtpng CXX)
 
-include(FetchContent)
-
-if(WIN32)
-  # Prevent pybind11 from sharing resources with other, potentially ABI incompatible modules
-  # https://github.com/pybind/pybind11/issues/2898
-  add_definitions(-DPYBIND11_COMPILER_TYPE="_${PROJECT_NAME}_abi")
-endif()
-
-# Fetch pybind11 library
-FetchContent_Declare(
-  pybind11
-  GIT_REPOSITORY https://github.com/pybind/pybind11
-  GIT_TAG        v2.11.1
-  GIT_SHALLOW    True
+find_package(
+  Python 3.9 REQUIRED
+  COMPONENTS Interpreter Development.Module
+  OPTIONAL_COMPONENTS Development.SABIModule
 )
-FetchContent_MakeAvailable(pybind11)
+
+# Use LTO for building this module
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+
+# Fetch nanobind library
+include(FetchContent)
+FetchContent_Declare(
+  nanobind
+  GIT_REPOSITORY https://github.com/wjakob/nanobind
+  GIT_TAG        c5454462e35f29310df05b412b5c48997d634bdd
+)
+FetchContent_MakeAvailable(nanobind)
 
 # Fetch mtpng source
 FetchContent_Declare(
   mtpng
-  GIT_REPOSITORY https://github.com/brion/mtpng
-  GIT_TAG        016c3fb07b6300bb8a08ee8790e80bc1c93b0c84
+  GIT_REPOSITORY https://github.com/bvibber/mtpng
+  GIT_TAG        40f389daf89603d493e22597fdbe3d5b592a49a6
 )
 FetchContent_MakeAvailable(mtpng)
 
@@ -52,12 +53,27 @@ else()
 endif()
 
 # Create target for python library
-pybind11_add_module(${PROJECT_NAME} "pymtpng.cpp" "mtpng.hpp")
+nanobind_add_module(${PROJECT_NAME}
+  STABLE_ABI
+  "pymtpng.cpp"
+  "mtpng.hpp"
+)
+nanobind_add_stub(
+  ${PROJECT_NAME}_stub
+  MODULE ${PROJECT_NAME}
+  OUTPUT ${PROJECT_NAME}.pyi
+  PYTHON_PATH $<TARGET_FILE_DIR:${PROJECT_NAME}>
+  DEPENDS ${PROJECT_NAME}
+  MARKER_FILE py.typed
+)
 target_link_libraries(${PROJECT_NAME} PRIVATE mtpng_static)
 set_target_properties(${PROJECT_NAME} PROPERTIES
   CXX_STANDARD 20
   CXX_STANDARD_REQUIRED ON
 )
+if(DEFINED SKBUILD_PROJECT_VERSION)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE VERSION_INFO=${SKBUILD_PROJECT_VERSION})
+endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
   target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra)
@@ -65,4 +81,12 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
   target_compile_options(${PROJECT_NAME} PUBLIC "/Zc:__cplusplus")
 endif()
 
-install(TARGETS ${PROJECT_NAME} DESTINATION ".")
+install(TARGETS ${PROJECT_NAME}
+  DESTINATION "${PROJECT_NAME}"
+)
+install(FILES
+  ${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}/__init__.py
+  ${${PROJECT_NAME}_BINARY_DIR}/py.typed
+  ${${PROJECT_NAME}_BINARY_DIR}/${PROJECT_NAME}.pyi
+  DESTINATION "${PROJECT_NAME}"
+)

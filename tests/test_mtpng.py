@@ -18,8 +18,7 @@ def encode_png(
     compression_level: pymtpng.CompressionLevel,
     strategy: pymtpng.Strategy,
 ) -> io.BytesIO:
-    encode_fns = {np.uint8: pymtpng.encode_png, np.uint16: pymtpng.encode_u16_png}
-    encode_fn = encode_fns[image.dtype]
+    encode_fn = pymtpng.encode_png if image.dtype == np.uint8 else pymtpng.encode_u16_png
     buffer = io.BytesIO()
     encode_fn(image, buffer, compression_level=compression_level, strategy=strategy)
     buffer.seek(0)

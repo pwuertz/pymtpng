@@ -1,32 +1,65 @@
-#include <memory>
-#include <vector>
+#include <functional>
 #include <map>
+#include <memory>
 #include <string_view>
+#include <vector>
 
 #include <Python.h>
-#include "pybind11/pybind11.h"
-#include "pybind11/numpy.h"
-#include "pybind11/stl.h"
+#include <nanobind/nanobind.h>
+#include <nanobind/ndarray.h>
+#include <nanobind/stl/map.h>
+#include <nanobind/stl/string_view.h>
 
 #include "mtpng.hpp"
 
 
 using namespace std::string_view_literals;
-namespace py = pybind11;
-
-constexpr auto VERSION = "1.0.2"sv;
+namespace nb = nanobind;
+using namespace nb::literals;
 
 using stringv_map = std::map<std::string_view, std::string_view>;
 
-using np_uint8_array_t = py::array_t<uint8_t, py::array::c_style>;
-using np_uint16_array_t = py::array_t<uint16_t, py::array::c_style>;
+using np_uint8_array_t = nb::ndarray<uint8_t, nb::c_contig, nb::device::cpu>;
+using np_uint16_array_t = nb::ndarray<uint16_t, nb::c_contig, nb::device::cpu>;
 
-using write_fn_t = std::function<size_t(const uint8_t* bytes, const size_t len)>;
+struct memoryview : public nb::object
+{
+    memoryview(const uint8_t* mem, const Py_ssize_t size)
+        : nb::object(makeMemoryView(mem, size), nb::detail::steal_t{})
+    { }
+
+private:
+    static PyObject* makeMemoryView(const uint8_t* mem, Py_ssize_t size)
+    {
+        auto* h = PyMemoryView_FromMemory(const_cast<char*>(reinterpret_cast<const char*>(mem)), size, PyBUF_READ);
+        if (!h) {
+            throw std::runtime_error("Failed creating memoryview");
+        }
+        return h;
+    }
+};
+
+struct Writer
+{
+    nb::callable py_write;
+    std::exception_ptr& eptr;
+
+    size_t write(const uint8_t* bytes, const size_t len) {
+        try {
+            if (!eptr) {
+                return nb::cast<size_t>(py_write(memoryview(bytes, Py_ssize_t(len))));
+            }
+        } catch(...) {
+            eptr = std::current_exception();
+        }
+        return size_t{0};
+    };
+};
 
 extern "C" size_t write_func(void* user_data, const uint8_t* bytes, const size_t len)
 {
-    const write_fn_t& py_write_fn = *reinterpret_cast<const write_fn_t*>(user_data);
-    return py_write_fn(bytes, len);
+    Writer& writer = *reinterpret_cast<Writer*>(user_data);
+    return writer.write(bytes, len);
 }
 
 extern "C" bool flush_func([[maybe_unused]] void* user_data)
@@ -73,10 +106,11 @@ enum class Dtype {
     U8, U16
 };
 
+template <typename T>
 void encode_png_impl(
-    const py::array& image,
+    const nb::ndarray<T, nb::c_contig, nb::device::cpu>& image,
     const Dtype dtype,
-    const py::object& writable,
+    const nb::object& writable,
     const mtpng_filter_t filter,
     const mtpng_strategy_t strategy,
     const mtpng_compression_level_t compression_level,
@@ -106,14 +140,10 @@ void encode_png_impl(
         if (r != MTPNG_RESULT_OK) { throw std::runtime_error("mtpng error"); }
     };
 
-    // Create write callback, store python exceptions
-    write_fn_t py_write_fn = [&, writer = writable.attr("write")](const uint8_t* bytes, const size_t len) {
-        try {
-            if (!eptr) { return writer(py::memoryview::from_memory(bytes, Py_ssize_t(len))).cast<int>(); }
-        } catch(...) {
-            eptr = std::current_exception();
-        }
-        return 0;
+    // Create write adapter
+    Writer writer {
+        .py_write=writable.attr("write"),
+        .eptr=eptr,
     };
 
     // Create threadpool and encoder options
@@ -132,7 +162,7 @@ void encode_png_impl(
 
     // Encode and write PNG
     {
-        void* user_data = const_cast<write_fn_t*>(&py_write_fn);
+        void* user_data = &writer;
         const auto encoder = create_encoder(write_func, flush_func, user_data, options.get());
         TRY(mtpng_encoder_write_header(encoder.get(), header.get()));
         TRY(write_itxt_chunks(encoder.get(), info));
@@ -141,7 +171,7 @@ void encode_png_impl(
         if (dtype == Dtype::U8) {
             // Write U8 data rows directly
             const auto* row_data = reinterpret_cast<const uint8_t*>(image.data());
-            for (int y = 0; y < height; ++y) {
+            for (size_t y = 0; y < height; ++y) {
                 TRY(mtpng_encoder_write_image_rows(encoder.get(), row_data, 1 * nitems_row));
                 row_data += nitems_row;
             }
@@ -149,8 +179,8 @@ void encode_png_impl(
             // Byteswap U16 data before writing rows (TODO: Check native byte order)
             const auto* row_data = reinterpret_cast<const uint16_t*>(image.data());
             std::vector<uint16_t> row_data_be(width * nchannels);
-            for (int y = 0; y < height; ++y) {
-                for (int x = 0; x < width; ++x) {
+            for (size_t y = 0; y < height; ++y) {
+                for (size_t x = 0; x < width; ++x) {
                     const uint16_t v = row_data[x];
                     row_data_be[x] = ((v & 0x00FF) << 8) | ((v & 0xFF00) >> 8);
                 }
@@ -165,7 +195,7 @@ void encode_png_impl(
 
 void encode_u16_png(
     const np_uint16_array_t& image,
-    const py::object& writable,
+    const nb::object& writable,
     const mtpng_filter_t filter,
     const mtpng_strategy_t strategy,
     const mtpng_compression_level_t compression_level,
@@ -176,7 +206,7 @@ void encode_u16_png(
 
 void encode_png(
     const np_uint8_array_t& image,
-    const py::object& writable,
+    const nb::object& writable,
     const mtpng_filter_t filter,
     const mtpng_strategy_t strategy,
     const mtpng_compression_level_t compression_level,
@@ -185,16 +215,14 @@ void encode_png(
     encode_png_impl(image, Dtype::U8, writable, filter, strategy, compression_level, info);
 }
 
-PYBIND11_MODULE(pymtpng, m) {
+NB_MODULE(pymtpng, m) {
 
-    m.attr("__version__") = py::str(VERSION.data(), VERSION.size());
-
-    py::enum_<mtpng_compression_level_t>(m, "CompressionLevel")
+    nb::enum_<mtpng_compression_level_t>(m, "CompressionLevel")
         .value("Fast", MTPNG_COMPRESSION_LEVEL_FAST)
         .value("Default", MTPNG_COMPRESSION_LEVEL_DEFAULT)
         .value("High", MTPNG_COMPRESSION_LEVEL_HIGH);
 
-    py::enum_<mtpng_filter_t>(m, "Filter")
+    nb::enum_<mtpng_filter_t>(m, "Filter")
         .value("Adaptive", MTPNG_FILTER_ADAPTIVE)
         .value("None", MTPNG_FILTER_NONE)
         .value("Sub", MTPNG_FILTER_SUB)
@@ -202,7 +230,7 @@ PYBIND11_MODULE(pymtpng, m) {
         .value("Average", MTPNG_FILTER_AVERAGE)
         .value("Paeth", MTPNG_FILTER_PAETH);
 
-    py::enum_<mtpng_strategy_t>(m, "Strategy")
+    nb::enum_<mtpng_strategy_t>(m, "Strategy")
         .value("Adaptive", MTPNG_STRATEGY_ADAPTIVE)
         .value("Default", MTPNG_STRATEGY_DEFAULT)
         .value("Filtered", MTPNG_STRATEGY_FILTERED)
@@ -211,18 +239,31 @@ PYBIND11_MODULE(pymtpng, m) {
         .value("Fixed", MTPNG_STRATEGY_FIXED);
 
     m.def(
-        "encode_png", &encode_png, "Encode PNG to writable object.",
-        py::arg("image"), py::arg("writable"),
-        py::arg("filter") = MTPNG_FILTER_ADAPTIVE,
-        py::arg("strategy") = MTPNG_STRATEGY_RLE,
-        py::arg("compression_level") = MTPNG_COMPRESSION_LEVEL_DEFAULT,
-        py::arg("info") = stringv_map {});
+        "encode_png", &encode_png,
+        "image"_a,
+        "writable"_a,
+        "filter"_a = MTPNG_FILTER_ADAPTIVE,
+        "strategy"_a = MTPNG_STRATEGY_RLE,
+        "compression_level"_a = MTPNG_COMPRESSION_LEVEL_DEFAULT,
+        "info"_a = stringv_map {},
+        "Encode PNG to writable object.");
 
     m.def(
-        "encode_u16_png", &encode_u16_png, "Encode 16bit PNG to writable object.",
-        py::arg("image"), py::arg("writable"),
-        py::arg("filter") = MTPNG_FILTER_ADAPTIVE,
-        py::arg("strategy") = MTPNG_STRATEGY_RLE,
-        py::arg("compression_level") = MTPNG_COMPRESSION_LEVEL_DEFAULT,
-        py::arg("info") = stringv_map {});
+        "encode_u16_png", &encode_u16_png,
+        "image"_a,
+        "writable"_a,
+        "filter"_a = MTPNG_FILTER_ADAPTIVE,
+        "strategy"_a = MTPNG_STRATEGY_RLE,
+        "compression_level"_a = MTPNG_COMPRESSION_LEVEL_DEFAULT,
+        "info"_a = stringv_map {},
+        "Encode 16bit PNG to writable object.");
+
+
+#define STRINGIFY(x) #x
+#define MACRO_STRINGIFY(x) STRINGIFY(x)
+#ifdef VERSION_INFO    
+    m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
+#else
+    m.attr("__version__") = "dev";
+#endif
 }
