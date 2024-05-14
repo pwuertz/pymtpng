@@ -224,7 +224,7 @@ NB_MODULE(pymtpng, m) {
 
     nb::enum_<mtpng_filter_t>(m, "Filter")
         .value("Adaptive", MTPNG_FILTER_ADAPTIVE)
-        .value("None", MTPNG_FILTER_NONE)
+        .value("None_", MTPNG_FILTER_NONE)
         .value("Sub", MTPNG_FILTER_SUB)
         .value("Up", MTPNG_FILTER_UP)
         .value("Average", MTPNG_FILTER_AVERAGE)
