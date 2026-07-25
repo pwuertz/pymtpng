@@ -1,3 +1,5 @@
-.*
-*.whl
+__pycache__
+.venv
 build
+dist
+*.whl

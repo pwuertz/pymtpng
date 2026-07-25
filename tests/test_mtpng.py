@@ -1,10 +1,11 @@
 import io
 
 import numpy as np
-import pymtpng
 import pytest
 from numpy.testing import assert_array_equal
 from PIL import Image
+
+import pymtpng
 
 
 @pytest.fixture(params=[np.uint8, np.uint16])

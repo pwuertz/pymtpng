@@ -215,7 +215,7 @@ void encode_png(
     encode_png_impl(image, Dtype::U8, writable, filter, strategy, compression_level, info);
 }
 
-NB_MODULE(pymtpng, m) {
+NB_MODULE(MODULE_NAME, m) {
 
     nb::enum_<mtpng_compression_level_t>(m, "CompressionLevel")
         .value("Fast", MTPNG_COMPRESSION_LEVEL_FAST)
@@ -258,11 +258,10 @@ NB_MODULE(pymtpng, m) {
         "info"_a = stringv_map {},
         "Encode 16bit PNG to writable object.");
 
-
 #define STRINGIFY(x) #x
 #define MACRO_STRINGIFY(x) STRINGIFY(x)
-#ifdef VERSION_INFO    
-    m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
+#ifdef MODULE_VERSION
+    m.attr("__version__") = MACRO_STRINGIFY(MODULE_VERSION);
 #else
     m.attr("__version__") = "dev";
 #endif

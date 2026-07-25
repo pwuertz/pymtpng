@@ -1,13 +1,9 @@
-[build-system]
-requires = ["scikit-build-core >=0.9", "typing_extensions; python_version < '3.11'"]
-build-backend = "scikit_build_core.build"
-
 [project]
 name = "pymtpng"
-version = "1.0.4"
+version = "1.1.0"
 description = "Python bindings for MTPNG library"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 authors = [
     { name = "Peter Würtz", email = "pwuertz@gmail.com" },
 ]
@@ -18,5 +14,51 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/pwuertz/pymtpng"
 
+[build-system]
+requires = ["scikit-build-core>=0.11", "nanobind"]
+build-backend = "scikit_build_core.build"
+
+[tool.uv]
+no-build-isolation-package = ["pymtpng"]
+
 [tool.scikit-build]
 wheel.py-api = "cp312"
+build-dir = "build/{wheel_tag}"
+editable.rebuild = true
+cmake.version = "CMakeLists.txt"
+cmake.args = ["--preset", "default"]
+
+[dependency-groups]
+dev = [
+    "nanobind",
+    "numpy",
+    "pillow",
+    "pytest>=8",
+    "ruff",
+    "scikit-build-core>=0.11",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint.isort]
+known-first-party = ["pymtpng"]
+
+[tool.cibuildwheel]
+build = "cp312-manylinux_x86_64"
+archs = ["x86_64"]
+build-frontend = "build"
+test-requires = ["pytest", "numpy", "pillow"]
+test-command = "pytest {project}/tests"
+
+[tool.cibuildwheel.linux]
+manylinux-x86_64-image = "manylinux_2_34"
+environment = { CMAKE_GENERATOR = "Ninja", PATH = "/root/.cargo/bin:$PATH" }
+before-all = [
+    "curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal",
+    "rustc --version",
+    "cargo --version",
+]
